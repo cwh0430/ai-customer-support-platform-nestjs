@@ -1,0 +1,198 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  moduleFormat  = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum GlobalRole {
+  SUPER_ADMIN
+  USER
+}
+
+enum MembershipRole {
+  ORG_ADMIN
+  SUPPORT_AGENT
+  CUSTOMER
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_VERIFICATION
+}
+
+model Organization {
+  id Int @id @default(autoincrement())
+  name String
+  slug String @unique
+  subscriptionPlan SubscriptionPlan @default(FREE)
+  apiKey String? @unique
+  isActive Boolean @default(true)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // memberships Membership[]
+  users User[]
+  tickets Ticket[]
+  ticketCategories TicketCategory[]
+  ticketTags TicketTag[]
+
+  @@index([subscriptionPlan])
+}
+
+model User {
+  id String @id @default(cuid())
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  organizationId Int?
+  email String @unique
+  status UserStatus @default(PENDING_VERIFICATION)
+  passwordHash String
+  firstName String
+  lastName String
+  globalRole GlobalRole
+  membershipRole MembershipRole?
+  refreshTokenHash String?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // memberships Membership[]
+  customerTickets Ticket[] @relation("customerTickets")
+  agentAssignTicket Ticket[] @relation("agentTickets")
+  createTicketCategory TicketCategory[] 
+  createTicketTag TicketTag[]
+
+  @@index([status])
+  @@index([organizationId])
+  @@index([firstName, lastName])
+}
+
+// model Membership {
+//   id String @id @default(cuid())
+//   user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+//   userId String
+//   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+//   organizationId Int
+//   role MembershipRole
+//   isActive Boolean @default(true)
+
+//   @@unique([organizationId, userId])
+// }
+
+model Ticket {
+  id String @id @default(cuid())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  organizationId Int
+  ticketNumber Int
+  ticketCategory TicketCategory? @relation(fields: [ticketCategoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  ticketCategoryId String?
+  title String
+  status TicketStatus @default(PENDING)
+  priority TicketPriority
+  customer User @relation("customerTickets", fields: [customerId], references: [id], onDelete: Restrict)
+  customerId String
+  agent User? @relation("agentTickets", fields: [assignedAgentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedAgentId String?
+  aiSummarizedData Json?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticketContent TicketContent?
+  ticketWithTags TicketWithTags[]
+
+  @@index([organizationId, createdAt]) // when no filter, retrieve ALL tickets based on organization
+  @@index([organizationId, status]) // When filter is applied, status index is included
+  @@index([organizationId, priority]) // When filter is applied, priority index is included
+  @@index([organizationId, customerId]) // When filter is applied, the customer ID relation is included
+  @@index([organizationId, assignedAgentId]) // When filter is applied, the agent ID relation is included
+  @@unique([organizationId, ticketNumber])
+}
+
+model TicketContent {
+  id String @id @default(cuid())
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  ticketId String @unique
+  content String
+  isInternal Boolean @default(false)
+  readAt DateTime?
+}
+
+model TicketCategory {
+  id String @id @default(cuid())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  organizationId Int
+  name String
+  color String?
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, createdById])
+}
+
+model TicketTag {
+  id String @id @default(cuid())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  organizationId Int
+  name String
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticketWithTags TicketWithTags[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, createdById])
+}
+
+model TicketWithTags {
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  ticketId String
+  ticketTag TicketTag @relation(fields: [ticketTagId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  ticketTagId String
+
+  @@id([ticketId, ticketTagId])
+}
+
+
+
